@@ -18,9 +18,7 @@ public class CameraController : MonoBehaviour
     private float invertYValue;
     private float invertXValue;
 
-    private bool useCamera;
-    //private bool useCamera;
-
+    private bool isCameraEnabled = true;
 
     private void Start()
     {
@@ -33,7 +31,7 @@ public class CameraController : MonoBehaviour
     void Update()
     {
         //useCamera = !Cursor.visible;
-        if (!Cursor.visible)
+        if (!Cursor.visible && isCameraEnabled)
         {
             invertYValue = invertYAxis ? -1f : 1f;
             invertXValue = invertXAxis ? -1f : 1f;
@@ -43,6 +41,22 @@ public class CameraController : MonoBehaviour
             var targetRotation = Quaternion.Euler(rotationX, rotationY, 0);
             var focusedPosition = followedTarget.position + new Vector3(framingOffset.x, framingOffset.y);
             transform.SetPositionAndRotation(focusedPosition - (targetRotation * new Vector3(0, 0, cameraToPlayerDistance)), targetRotation);
+        }
+    }
+
+    public void SetCameraEnabled(bool isEnabled)
+    {
+        isCameraEnabled = isEnabled;
+
+        if(isEnabled)
+        {
+            Cursor.visible = false;
+            Cursor.lockState = CursorLockMode.Locked;
+        }
+        else
+        {
+            Cursor.visible = true;
+            Cursor.lockState = CursorLockMode.None;
         }
     }
 
