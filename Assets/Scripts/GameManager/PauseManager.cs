@@ -9,7 +9,8 @@ public enum PauseReason
     Dialogue,
     Quest,
     SystemMenu,
-    Cutscene
+    Cutscene,
+    MapMenu
 }
 
 public sealed class PauseToken : IDisposable
