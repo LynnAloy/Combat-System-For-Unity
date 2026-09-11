@@ -7,6 +7,9 @@ using UnityEngine.EventSystems;
 [DisallowMultipleComponent]
 public sealed class WorldMapNavigationController :MonoBehaviour, IPointerClickHandler
 {
+    [Header("ScreenNavigation")]
+    [SerializeField] private WorldRouteRenderer worldRouteRenderer;
+
     [Header("References")]
     [SerializeField] private Camera worldMapCamera;
     [SerializeField] private Terrain mapTerrain;
@@ -19,21 +22,13 @@ public sealed class WorldMapNavigationController :MonoBehaviour, IPointerClickHa
     [SerializeField] private RectTransform destinationMarker;
 
     [Header("Navigation")]
-    [SerializeField, Min(0.1f)]
-    private float startSampleDistance = 3f;
+    [SerializeField, Min(0.1f)] private float startSampleDistance = 3f;
 
-    [SerializeField, Min(0.1f)]
-    private float destinationSampleDistance = 5f;
+    [SerializeField, Min(0.1f)] private float destinationSampleDistance = 5f;
 
-    [SerializeField, Min(1f)]
-    private float terrainRayDistance = 2000f;
+    [SerializeField, Min(1f)] private float terrainRayDistance = 2000f;
 
-    [SerializeField]
-    private string[] allowedAreaNames =
-    {
-        "Walkable",
-        "Road"
-    };
+    [SerializeField] private string[] allowedAreaNames = {"Walkable", "Road"};
 
     public bool HasDestination { get; private set; }
     public Vector3 Destination { get; private set; }
@@ -80,15 +75,13 @@ public sealed class WorldMapNavigationController :MonoBehaviour, IPointerClickHa
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        if (eventData.button ==
-            PointerEventData.InputButton.Right)
+        if (eventData.button == PointerEventData.InputButton.Right)
         {
             ClearDestination();
             return;
         }
 
-        if (eventData.button !=
-            PointerEventData.InputButton.Left)
+        if (eventData.button != PointerEventData.InputButton.Left)
         {
             return;
         }
@@ -96,23 +89,19 @@ public sealed class WorldMapNavigationController :MonoBehaviour, IPointerClickHa
         TrySetDestination(eventData);
     }
 
-    public bool TrySetDestination(
-        PointerEventData eventData)
+    public bool TrySetDestination(PointerEventData eventData)
     {
         if (!ValidateReferences())
         {
             return false;
         }
 
-        if (!TryGetMapViewportPosition(
-            eventData,
-            out Vector2 viewportPosition))
+        if (!TryGetMapViewportPosition(eventData, out Vector2 viewportPosition))
         {
             return false;
         }
 
-        Ray ray = worldMapCamera.ViewportPointToRay(
-            new Vector3(viewportPosition.x, viewportPosition.y, 0f));
+        Ray ray = worldMapCamera.ViewportPointToRay(new Vector3(viewportPosition.x, viewportPosition.y, 0f));
 
         if (!terrainCollider.Raycast(ray, out RaycastHit terrainHit, terrainRayDistance))
         {
@@ -149,6 +138,8 @@ public sealed class WorldMapNavigationController :MonoBehaviour, IPointerClickHa
         }
 
         worldPathCorners = navigationPath.corners;
+
+        worldRouteRenderer?.ShowRoute(worldPathCorners);
 
         if (worldPathCorners == null || worldPathCorners.Length < 2)
         {
@@ -187,6 +178,7 @@ public sealed class WorldMapNavigationController :MonoBehaviour, IPointerClickHa
         }
 
         DestinationCleared?.Invoke();
+        worldRouteRenderer?.ClearRoute();
     }
 
     private void RefreshMapOverlay()
