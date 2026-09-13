@@ -24,6 +24,7 @@ public class PlayerController : Singleton<PlayerController>
     // 防止 Animator 配置损坏、动画速度为 0 或状态无法进入时永久锁死玩家
     [SerializeField, Min(0.5f)] private float weaponActionTimeout = 3f;
     private float weaponActionElapsed;
+    private bool sprintToggleEnabled;
     private const string ActionLayerName = "Weapon Layer";
     private int actionLayerIndex = 1;
 
@@ -43,6 +44,7 @@ public class PlayerController : Singleton<PlayerController>
     [SerializeField, Min(0.1f)] private float rollDuration = 1.6f;
     [SerializeField] private AnimationClip rollAnimation;
     [SerializeField, Range(0.01f, 0.5f)] private float rollInputDeadZone = 0.15f;
+    [SerializeField] private float normalToRollSpeedDivide = 3.0f;
 
     private const string OverrideLayerName = "Override Layer";
     private static readonly int RollPlaybackSpeedHash = Animator.StringToHash("RollPlaybackSpeed");
@@ -53,6 +55,7 @@ public class PlayerController : Singleton<PlayerController>
     private bool isRolling;
     private float rollElapsed;
     private Vector3 rollDirection;
+    private float activeRollSpeed;
     private float activeRollDuration;
     private float activeRollDistance;
     private float activeRollBlendDuration;
@@ -175,10 +178,17 @@ public class PlayerController : Singleton<PlayerController>
             return;
         }
 
-        bool wantsSprint = inputAmount > 0.01f && !combatController.InCombat &&
-                           Input.GetKey(sprintKey);
+        if (combatController.InCombat)
+        {
+            sprintToggleEnabled = false;
+        }
+        else if (Input.GetKeyDown(sprintKey))
+        {
+            sprintToggleEnabled = !sprintToggleEnabled;
+        }
 
-        UpdateSprintState(wantsSprint);
+        UpdateSprintState(sprintToggleEnabled);
+
         UpdateGravity();
 
         Vector3 velocity;
@@ -361,6 +371,7 @@ public class PlayerController : Singleton<PlayerController>
     {
         if (!CanPlayActionState(sheatheSwordStateHash, "Sheathe Sword"))
         {
+            sprintToggleEnabled = false;
             sprintState = SprintState.Armed;
             return;
         }
@@ -427,33 +438,25 @@ public class PlayerController : Singleton<PlayerController>
             return;
         }
 
-        // 在清空普通移动速度前，记录进入翻滚时的速度。
-        float sampledSpeed = currentPlanarSpeed;
+        // 在清空普通移动速度前保存角色的实际水平速度。
+        float sampledSpeed = NumericGuard.IsFinite(currentPlanarSpeed) ? currentPlanarSpeed : 0f;
 
-        if (sampledSpeed <= 0.01f)
-        {
-            sampledSpeed = movementSpeed;
-        }
-
-        sampledSpeed = Mathf.Max(sampledSpeed, 0.01f);
+        // 翻滚速度至少为普通移动速度；冲刺中则继承当前冲刺速度。
+        activeRollSpeed = Mathf.Max(sampledSpeed, Mathf.Max(movementSpeed, 0.01f)) / normalToRollSpeedDivide;
         activeRollDistance = Mathf.Max(rollDistance, 0f);
 
-        // 距离大于零时，由采样速度决定推进时长。
-        if (activeRollDistance > 0f)
+        float fallbackDuration = Mathf.Max(rollDuration, 0.1f);
+        activeRollDuration = fallbackDuration;
+
+        if (activeRollDistance > NumericGuard.MinDenominator)
         {
-            activeRollDuration = activeRollDistance / sampledSpeed;
-        }
-        else
-        {
-            // 保留距离为零时，只播放原地翻滚的能力。
-            activeRollDuration = Mathf.Max(rollDuration, 0.1f);
+            activeRollDuration = NumericGuard.SafeDivide(
+                activeRollDistance,
+                activeRollSpeed,
+                fallbackDuration);
         }
 
-        activeRollBlendDuration = Mathf.Clamp(rollTransitionDuration, 0f, activeRollDuration);
-
-        // 每次开始时固定参数，避免一次翻滚中途改变距离或时长。
-        activeRollDuration = Mathf.Max(rollDuration, 0.1f);
-        activeRollDistance = Mathf.Max(rollDistance, 0f);
+        activeRollDuration = Mathf.Max(activeRollDuration, 0.1f);
         activeRollBlendDuration = Mathf.Clamp(rollTransitionDuration, 0f, activeRollDuration);
 
         rollDirection = ReadRollDirection();
@@ -471,7 +474,8 @@ public class PlayerController : Singleton<PlayerController>
 
         meeleFighter.SetIsInvulnerable(true);
 
-        float playbackSpeed = rollAnimation.length / activeRollDuration;
+
+        float playbackSpeed = NumericGuard.SafeDivide(rollAnimation.length, activeRollDuration, 1f);
 
         animator.SetFloat(RollPlaybackSpeedHash, playbackSpeed);
         animator.SetFloat("ForwardSpeed", 0f);
@@ -506,8 +510,8 @@ public class PlayerController : Singleton<PlayerController>
         rollElapsed = Mathf.Min(rollElapsed + Time.deltaTime, activeRollDuration);
         float currentProgress = Mathf.Clamp01(rollElapsed / activeRollDuration);
 
-        float previousDistance = Mathf.SmoothStep(0f, activeRollDistance, previousProgress);
-        float currentDistance = Mathf.SmoothStep(0f, activeRollDistance, currentProgress);
+        float previousDistance = activeRollDistance * previousProgress;
+        float currentDistance = activeRollDistance * currentProgress;
 
         Vector3 displacement = rollDirection * (currentDistance - previousDistance);
         displacement.y = speedY * Time.deltaTime;
@@ -543,7 +547,13 @@ public class PlayerController : Singleton<PlayerController>
         isRollExiting = false;
         rollElapsed = 0f;
         rollExitElapsed = 0f;
-        currentPlanarSpeed = 0f;
+        // [替换]
+        float horizontal = Input.GetAxisRaw("Horizontal");
+        float vertical = Input.GetAxisRaw("Vertical");
+        float inputMagnitudeSquared = horizontal * horizontal + vertical * vertical;
+        float deadZoneSquared = rollInputDeadZone * rollInputDeadZone;
+
+        currentPlanarSpeed = inputMagnitudeSquared > deadZoneSquared ? activeRollSpeed : 0f;
         targetRotation = transform.rotation;
 
         if (!returnToEmptyState || overrideLayerIndex < 0)
@@ -678,6 +688,7 @@ public class PlayerController : Singleton<PlayerController>
             meeleFighter.SetIsInvulnerable(false);
         }
 
+        sprintToggleEnabled = false;
         sprintState = SprintState.Armed;
         currentPlanarSpeed = 0f;
         weaponActionElapsed = 0f;

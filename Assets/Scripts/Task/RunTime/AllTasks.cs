@@ -22,6 +22,13 @@ namespace FlexibleTaskSystem
         private bool advanceRequested;
         private bool isAdvancing;
 
+        //临时任务
+        private GameTask suspendedTask;
+        private bool interruptActive;
+
+        public bool IsInterruptActive => interruptActive;
+        public event Action<int, GameTask> TaskResumed;
+
         public IReadOnlyList<GameTask> Tasks => tasks;
         public GameTask Current => current;
         public int CurrentIndex => currentIndex;
@@ -68,6 +75,9 @@ namespace FlexibleTaskSystem
                 return;
             }
 
+            suspendedTask = null;
+            interruptActive = false;
+
             EnsureContext();
             DetachCurrent();
 
@@ -87,6 +97,30 @@ namespace FlexibleTaskSystem
             RequestAdvance();
         }
 
+        //启动临时任务
+        public bool TryStartInterrupt(GameTask interruptTask)
+        {
+            if (!IsRunning ||
+                current == null ||
+                interruptTask == null ||
+                interruptActive)
+            {
+                return false;
+            }
+
+            DetachCurrent();
+
+            suspendedTask = current;
+            current = interruptTask;
+            interruptActive = true;
+
+            current.ResetTask();
+            AttachCurrent();
+            current.StartTask(context);
+
+            return true;
+        }
+
         public void Pause()
         {
             if (IsRunning)
@@ -103,13 +137,64 @@ namespace FlexibleTaskSystem
             }
         }
 
+        //从临时任务恢复到主任务
+        private void RestoreInterruptedTask()
+        {
+            DetachCurrent();
+
+            current = suspendedTask;
+            suspendedTask = null;
+            interruptActive = false;
+
+            if (current == null)
+            {
+                RequestAdvance();
+                return;
+            }
+
+            if (current.State == GameTaskState.Completed)
+            {
+                TaskCompleted?.Invoke(currentIndex, current);
+                RequestAdvance();
+                return;
+            }
+
+            if (current.State == GameTaskState.Failed)
+            {
+                TaskFailed?.Invoke(
+                    currentIndex,
+                    current,
+                    "Task failed while interrupted.");
+
+                IsRunning = false;
+                IsPaused = false;
+                return;
+            }
+
+            if (current.State != GameTaskState.Running)
+            {
+                RequestAdvance();
+                return;
+            }
+
+            AttachCurrent();
+            TaskResumed?.Invoke(currentIndex, current);
+        }
+
         public void StopSequence()
         {
             DetachCurrent();
             current?.CancelTask();
 
+            if (suspendedTask != null && suspendedTask != current)
+            {
+                suspendedTask.CancelTask();
+            }
+
             current = null;
+            suspendedTask = null;
             currentIndex = -1;
+            interruptActive = false;
             IsRunning = false;
             IsPaused = false;
             advanceRequested = false;
@@ -249,18 +334,40 @@ namespace FlexibleTaskSystem
 
         private void OnCurrentStarted(GameTask task)
         {
-            TaskStarted?.Invoke(currentIndex, task);
+            int eventIndex = interruptActive ? -1 : currentIndex;
+            TaskStarted?.Invoke(eventIndex, task);
         }
 
         private void OnCurrentCompleted(GameTask task)
         {
-            TaskCompleted?.Invoke(currentIndex, task);
+            int eventIndex = interruptActive ? -1 : currentIndex;
+            TaskCompleted?.Invoke(eventIndex, task);
+
+            if (interruptActive)
+            {
+                RestoreInterruptedTask();
+                return;
+            }
+
             RequestAdvance();
         }
 
         private void OnCurrentFailed(GameTask task, string reason)
         {
-            TaskFailed?.Invoke(currentIndex, task, reason);
+            int eventIndex = interruptActive ? -1 : currentIndex;
+            TaskFailed?.Invoke(eventIndex, task, reason);
+
+            if (interruptActive)
+            {
+                if (failurePolicy == TaskFailurePolicy.SkipFailedTask)
+                {
+                    RestoreInterruptedTask();
+                    return;
+                }
+
+                StopSequence();
+                return;
+            }
 
             if (failurePolicy == TaskFailurePolicy.SkipFailedTask)
             {
@@ -274,16 +381,11 @@ namespace FlexibleTaskSystem
             advanceRequested = false;
         }
 
-        private void OnCurrentProgressChanged(
-            GameTask task,
-            int currentAmount,
-            int requiredAmount)
+        private void OnCurrentProgressChanged(GameTask task, int currentAmount, int requiredAmount)
         {
-            TaskProgressChanged?.Invoke(
-                currentIndex,
-                task,
-                currentAmount,
-                requiredAmount);
+            int eventIndex = interruptActive ? -1 : currentIndex;
+
+            TaskProgressChanged?.Invoke(eventIndex, task, currentAmount, requiredAmount);
         }
     }
 }

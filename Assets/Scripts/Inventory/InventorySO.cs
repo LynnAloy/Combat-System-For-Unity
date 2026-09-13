@@ -94,7 +94,6 @@ namespace Inventory.Model
                     {
                         inventoryItems[i] = inventoryItems[i]
                             .ChangeQuantity(inventoryItems[i].quantity + quantity);
-                        InformAboutChange();
                         return 0;
                     }
                 }
@@ -120,6 +119,28 @@ namespace Inventory.Model
                 returnValue[i] = inventoryItems[i];
             }
             return returnValue;
+        }
+
+        public int GetItemQuantity(ItemSO targetItem)
+        {
+            if (targetItem == null || inventoryItems == null)
+            {
+                return 0;
+            }
+
+            int totalQuantity = 0;
+
+            foreach (InventoryItem inventoryItem in inventoryItems)
+            {
+                if (inventoryItem.IsEmpty || inventoryItem.item != targetItem)
+                {
+                    continue;
+                }
+
+                totalQuantity += inventoryItem.quantity;
+            }
+
+            return totalQuantity;
         }
 
         public InventoryItem GetItemAt(int itemIndex)
@@ -165,6 +186,56 @@ namespace Inventory.Model
                 }
                 InformAboutChange();
             }
+        }
+
+        public bool TryRemoveItem(ItemSO targetItem, int amount)
+        {
+            if (targetItem == null ||
+                amount <= 0 ||
+                inventoryItems == null)
+            {
+                return false;
+            }
+
+            if (GetItemQuantity(targetItem) < amount)
+            {
+                return false;
+            }
+
+            int remaining = amount;
+
+            for (int i = 0; i < inventoryItems.Count && remaining > 0; i++)
+            {
+                InventoryItem inventoryItem = inventoryItems[i];
+
+                if (inventoryItem.IsEmpty ||
+                    inventoryItem.item != targetItem)
+                {
+                    continue;
+                }
+
+                int removedAmount = Mathf.Min(
+                    inventoryItem.quantity,
+                    remaining);
+
+                int newQuantity =
+                    inventoryItem.quantity - removedAmount;
+
+                if (newQuantity <= 0)
+                {
+                    inventoryItems[i] = InventoryItem.GetEmptyItem();
+                }
+                else
+                {
+                    inventoryItems[i] =
+                        inventoryItem.ChangeQuantity(newQuantity);
+                }
+
+                remaining -= removedAmount;
+            }
+
+            InformAboutChange();
+            return remaining == 0;
         }
 
         [Serializable]

@@ -21,8 +21,8 @@ public class Item : MonoBehaviour
 
     internal void DestroyItem()
     {
-        Collider collider = GetComponent<Collider>();
-        if (collider != null)
+        Collider[] colliders = GetComponentsInChildren<Collider>();
+        foreach(var collider in colliders)
         {
             collider.enabled = false;
         }

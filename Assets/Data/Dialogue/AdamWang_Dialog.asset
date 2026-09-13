@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ab47202e1f78c584db80977dc5f1b89c, type: 3}
+  m_Name: AdamWang_Dialog
+  m_EditorClassIdentifier: 
+  dialogueId: 1
+  lines:
+  - speaker: Adam Wang
+    text: "\u5251\u58EB\uFF0C\u4F60\u7EC8\u4E8E\u9192\u4E86"
+  - speaker: "\u6211"
+    text: "\u8C22\u5929\u8C22\u5730\uFF0C\u662F\u554A\uFF0C\u771F\u662F\u597D\u957F\u4E00\u89C9"
+  - speaker: Adam Wang
+    text: "\u997F\u4E86\u5417\uFF0C\u4F46\u662F\u6211\u5BB6\u6682\u65F6\u6CA1\u6709\u5403\u7684"
+  - speaker: Adam Wang
+    text: "\u4F60\u5F80\u5317\u8D70\uFF0C\u6709\u4E2A\u9AD8\u53F0\uFF0C\u90A3\u91CC\u4E0B\u9762\u5E94\u8BE5\u6709\u70B9\u5403\u7684"
+  - speaker: Adam Wang
+    text: "\u4F60\u5E26\u56DE\u6765\u54B1\u4EEC\u4E00\u8D77\u5403"

@@ -22,7 +22,7 @@ namespace FlexibleTaskSystem
 
         protected override void OnTick(float deltaTime)
         {
-            elapsed += Time.deltaTime;
+            elapsed += deltaTime;
 
             if(elapsed >= duration)
             {

@@ -1,14 +1,12 @@
 using System;
+using GameDefinitions;
 using UnityEngine;
 using UnityEngine.Events;
 
 [DisallowMultipleComponent]
+[RequireComponent(typeof(NpcIdentity))]
 public sealed class NpcInteractable : MonoBehaviour, IInteractable
 {
-    [Header("Identity")]
-    [SerializeField] private string npcId = "npc_example";
-    [SerializeField] private string displayName = "NPC";
-
     [Header("Interaction")]
     [SerializeField] private Transform interactionPoint;
     [SerializeField] private bool interactionEnabled = true;
@@ -17,10 +15,27 @@ public sealed class NpcInteractable : MonoBehaviour, IInteractable
     [Header("Temporary Inspector Event")]
     [SerializeField] private UnityEvent onInteracted;
 
+    private NpcIdentity npcIdentity;
+
     public event Action<NpcInteractable, GameObject> InteractionRequested;
 
-    public string NpcId => npcId;
-    public string DisplayName => displayName;
+    public NpcDefinitionSO Definition => npcIdentity.Definition;
+
+    public string NpcId
+    {
+        get
+        {
+            return Definition != null ? Definition.PersistentId : string.Empty;
+        }
+    }
+
+    public string DisplayName
+    {
+        get
+        {
+            return Definition != null ? Definition.DisplayName : "未配置 NPC";
+        }
+    }
 
     public Transform InteractionPoint
     {
@@ -30,14 +45,23 @@ public sealed class NpcInteractable : MonoBehaviour, IInteractable
         }
     }
 
+    private void Awake()
+    {
+        npcIdentity = GetComponent<NpcIdentity>();
+    }
+
     public bool CanInteract(GameObject interactor)
     {
-        return interactionEnabled && isActiveAndEnabled && gameObject.activeInHierarchy;
+        return interactionEnabled &&
+               isActiveAndEnabled &&
+               gameObject.activeInHierarchy &&
+               npcIdentity != null &&
+               npcIdentity.IsConfigured;
     }
 
     public string GetInteractionPrompt(GameObject interactor)
     {
-        return $"与 {displayName} {interactionVerb}";
+        return $"与 {DisplayName} {interactionVerb}";
     }
 
     public void Interact(GameObject interactor)
@@ -47,7 +71,9 @@ public sealed class NpcInteractable : MonoBehaviour, IInteractable
             return;
         }
 
-        Debug.Log($"Interaction requested with NPC '{npcId}'.", this);
+        Debug.Log(
+            $"Interaction requested with NPC '{DisplayName}'.",
+            this);
 
         InteractionRequested?.Invoke(this, interactor);
         onInteracted?.Invoke();
@@ -61,13 +87,15 @@ public sealed class NpcInteractable : MonoBehaviour, IInteractable
 #if UNITY_EDITOR
     private void OnValidate()
     {
-        npcId = npcId.Trim();
-        displayName = displayName.Trim();
-        interactionVerb = interactionVerb.Trim();
+        interactionVerb = interactionVerb?.Trim() ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(npcId))
+        NpcIdentity identity = GetComponent<NpcIdentity>();
+
+        if (identity == null || !identity.IsConfigured)
         {
-            Debug.LogWarning("NPC requires a stable and unique NPC ID.", this);
+            Debug.LogWarning(
+                "NpcInteractable requires a configured NpcIdentity.",
+                this);
         }
     }
 #endif

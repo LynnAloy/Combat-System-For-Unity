@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5cf86f8b318133a4b85012456add6d15, type: 3}
+  m_Name: LegendaryEgg
+  m_EditorClassIdentifier: 
+  <IsStackable>k__BackingField: 0
+  <MaxStackSize>k__BackingField: 1
+  <Name>k__BackingField: "\u4F20\u4E16\u714E\u86CB"
+  <Description>k__BackingField: "\u653E\u5728\u54E8\u5854\u4E0B\u4E0D\u77E5\u9053\u591A\u4E45\u7684\u714E\u86CB\uFF0C\u4F46\u662F\u597D\u50CF\u5E94\u8BE5\u5927\u6982\u8FD8\u80FD\u5403"
+  <ItemImage>k__BackingField: {fileID: 21300000, guid: cabfe0eae90830646902429ee4988dd6, type: 3}

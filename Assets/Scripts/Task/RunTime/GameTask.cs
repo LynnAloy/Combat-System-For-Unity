@@ -1,4 +1,6 @@
 using System;
+using GameplayEvents;
+using GameplayEvents.Tasks;
 using UnityEngine;
 
 namespace FlexibleTaskSystem
@@ -17,6 +19,9 @@ namespace FlexibleTaskSystem
     {
         [SerializeField] private string id = Guid.NewGuid().ToString();
         [SerializeField] private string title = "New Task";
+
+        [Header("Optional Completion Output")]
+        [SerializeField] private TaskCompletedSignalSO completedSignal;
 
         [NonSerialized] private GameTaskState state = GameTaskState.Pending;
         [NonSerialized] private TaskContext context;
@@ -46,9 +51,10 @@ namespace FlexibleTaskSystem
                     $"Task '{title}' is {state}, not Pending.");
             }
 
-            context = taskContext ?? throw new ArgumentNullException(nameof(taskContext));
-            state = GameTaskState.Running;
+            context = taskContext ??
+                throw new ArgumentNullException(nameof(taskContext));
 
+            state = GameTaskState.Running;
             Started?.Invoke(this);
 
             if (state == GameTaskState.Running)
@@ -100,7 +106,10 @@ namespace FlexibleTaskSystem
             }
 
             int validatedRequired = Mathf.Max(1, required);
-            int validatedCurrent = Mathf.Clamp(current, 0, validatedRequired);
+            int validatedCurrent = Mathf.Clamp(
+                current,
+                0,
+                validatedRequired);
 
             bool changed = !hasProgress ||
                            currentProgress != validatedCurrent ||
@@ -133,6 +142,7 @@ namespace FlexibleTaskSystem
 
             state = GameTaskState.Completed;
             OnEnd(state);
+            PublishCompletedSignal();
             Completed?.Invoke(this);
         }
 
@@ -146,6 +156,27 @@ namespace FlexibleTaskSystem
             state = GameTaskState.Failed;
             OnEnd(state);
             Failed?.Invoke(this, reason);
+        }
+
+        private void PublishCompletedSignal()
+        {
+            if (completedSignal == null || context == null)
+            {
+                return;
+            }
+
+            try
+            {
+                TaskCompletedEvent payload = new TaskCompletedEvent(
+                    this,
+                    context.Runner);
+
+                GameEventHub.Publish(completedSignal, payload);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception, context.Owner);
+            }
         }
 
         protected abstract void OnStart();

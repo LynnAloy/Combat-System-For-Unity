@@ -93,6 +93,76 @@ public class MeeleFighter : MonoBehaviour
     }
 
     private MeeleFighter currentTarget;
+
+    private bool externalActionInProgress;
+
+    public bool TryBeginExternalAction(MeeleFighter target)
+    {
+        if (InAction || Health <= 0f || target == null || target.Health <= 0f)
+        {
+            return false;
+        }
+
+        DisableAllHitboxes();
+
+        doCombo = false;
+        comboCount = 0;
+        currentTarget = target;
+        AttackState = InCombat.AttackState.Cooldown;
+        InAction = true;
+        externalActionInProgress = true;
+        return true;
+    }
+
+    public void EndExternalAction()
+    {
+        if (!externalActionInProgress)
+        {
+            return;
+        }
+
+        DisableAllHitboxes();
+
+        externalActionInProgress = false;
+        doCombo = false;
+        comboCount = 0;
+        currentTarget = null;
+        AttackState = InCombat.AttackState.Idle;
+        InAction = false;
+    }
+
+    public bool TryReceiveDamage(float damage, MeeleFighter attacker)
+    {
+        if (damage <= 0f || attacker == null || Health <= 0f)
+        {
+            return false;
+        }
+
+        if (IsInvulnerable || InCounter)
+        {
+            return false;
+        }
+
+        bool shouldStartHitReaction = !IsTakingHit;
+
+        TakeDamage(damage);
+
+        if (Health <= 0f)
+        {
+            OnGotHit?.Invoke(attacker);
+            PlayDeathAnimation(attacker);
+            return true;
+        }
+
+        if (shouldStartHitReaction)
+        {
+            OnGotHit?.Invoke(attacker);
+            StartCoroutine(GetHitReaction(attacker));
+        }
+
+        return true;
+    }
+
     private IEnumerator Attack(MeeleFighter target = null)
     {
         InAction = true;
@@ -191,28 +261,19 @@ public class MeeleFighter : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (IsInvulnerable || IsTakingHit || InCounter)
+        if (!other.CompareTag("Hitbox"))
         {
             return;
         }
-        if (other.CompareTag("Hitbox") && !IsTakingHit && !InCounter)
+
+        var attacker = other.GetComponentInParent<MeeleFighter>();
+
+        if (attacker == null || attacker.currentTarget != this)
         {
-            var attacker = other.GetComponentInParent<MeeleFighter>();
-            if(attacker.currentTarget != this)  
-            {
-                return;
-            }
-            TakeDamage(5f);
-            OnGotHit?.Invoke(attacker);
-            if (Health > 0)
-            {
-                StartCoroutine(GetHitReaction(attacker));
-            }
-            else
-            {
-                PlayDeathAnimation(attacker);
-            }            
+            return;
         }
+
+        TryReceiveDamage(5f, attacker);
     }
 
     private void TakeDamage(float damage)

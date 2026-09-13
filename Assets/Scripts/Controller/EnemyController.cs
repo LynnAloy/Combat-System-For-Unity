@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
+using System;
 
 public enum EnemyStates
 {
@@ -27,13 +28,24 @@ public class EnemyController : MonoBehaviour
     public CharacterController CharacterController { get; private set; }
     public SkinnedMeshHighlighter SkinnedMeshHighlighter { get; private set; }
 
+    public bool IsDead { get; private set; }
+
+    public event Action<EnemyController> OnDead;
+
     private static readonly int ForwardSpeedHash = Animator.StringToHash("ForwardSpeed");
     private static readonly int StrafeSpeedHash = Animator.StringToHash("StrafeSpeed");
     private Vector3 enemyPrePosition;
 
-    private void Start()
+
+    private void Awake()
     {
-        stateDictionary = new()
+        NavAgent = GetComponent<NavMeshAgent>();
+        Animator = GetComponent<Animator>();
+        Fighter = GetComponent<MeeleFighter>();
+        CharacterController = GetComponent<CharacterController>();
+        SkinnedMeshHighlighter = GetComponent<SkinnedMeshHighlighter>();
+
+        stateDictionary = new Dictionary<EnemyStates, State<EnemyController>>
         {
             [EnemyStates.Idle] = GetComponent<IdleState>(),
             [EnemyStates.CombatMovement] = GetComponent<CombatMovementState>(),
@@ -42,18 +54,15 @@ public class EnemyController : MonoBehaviour
             [EnemyStates.Dead] = GetComponent<DeadState>(),
             [EnemyStates.GettingHit] = GetComponent<GettingHitState>()
         };
-        NavAgent = GetComponent<NavMeshAgent>();
-        Animator = GetComponent<Animator>();
+
         StateMachine = new StateMachine<EnemyController>(this);
         StateMachine.ChangeState(stateDictionary[EnemyStates.Idle]);
-        Fighter = GetComponent<MeeleFighter>();
-        CharacterController = GetComponent<CharacterController>();
-        SkinnedMeshHighlighter = GetComponent<SkinnedMeshHighlighter>();
-        Fighter.OnGotHit += (MeeleFighter attacker) =>
+
+        Fighter.OnGotHit += attacker =>
         {
             if (Fighter.Health > 0)
             {
-                if(Target == null)
+                if (Target == null)
                 {
                     Target = attacker;
                     AlertNearbyEnemies();
@@ -66,6 +75,7 @@ public class EnemyController : MonoBehaviour
                 ChangeState(EnemyStates.Dead);
             }
         };
+
         enemyPrePosition = transform.position;
     }
 
@@ -124,9 +134,22 @@ public class EnemyController : MonoBehaviour
         ChangeState(EnemyStates.GettingHit);
     }
 
-    public void ChangeState(EnemyStates enemyStates)
+    public void ChangeState(EnemyStates enemyState)
     {
-        StateMachine.ChangeState(stateDictionary[enemyStates]);
+        if (enemyState == EnemyStates.Dead && IsDead)
+        {
+            return;
+        }
+
+        StateMachine.ChangeState(stateDictionary[enemyState]);
+
+        if (enemyState != EnemyStates.Dead)
+        {
+            return;
+        }
+
+        IsDead = true;
+        OnDead?.Invoke(this);
     }
 
     public bool IsInState(EnemyStates state)
@@ -166,5 +189,36 @@ public class EnemyController : MonoBehaviour
                 enemyNearby.ChangeState(EnemyStates.CombatMovement);
             }
         }
+    }
+
+    public bool TryEngageTarget(MeeleFighter target)
+    {
+        if (target == null || target.Health <= 0 || IsDead)
+        {
+            return false;
+        }
+
+        if (StateMachine == null || NavAgent == null)
+        {
+            Debug.LogError("EnemyController is not initialized.", this);
+            return false;
+        }
+
+        if (!NavAgent.enabled || !NavAgent.isOnNavMesh)
+        {
+            Debug.LogError("Enemy NavMeshAgent is not placed on a NavMesh.", this);
+            return false;
+        }
+
+        Target = target;
+        NavAgent.isStopped = false;
+
+        if (EnemyManager.Instance != null)
+        {
+            EnemyManager.Instance.AddEnemyInRange(this);
+        }
+
+        ChangeState(EnemyStates.CombatMovement);
+        return true;
     }
 }
