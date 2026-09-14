@@ -6,7 +6,7 @@ using UnityEngine;
 namespace FlexibleTaskSystem
 {
     [Serializable]
-    public sealed class AcquireItemTask : GameTask
+    public sealed class AcquireItemTask : GameTask, ITaskNavigationSource
     {
         [SerializeField] private InventorySO inventoryData;
         [SerializeField] private ItemSO targetItem;
@@ -61,6 +61,12 @@ namespace FlexibleTaskSystem
             {
                 Complete();
             }
+        }
+
+        public bool TryGetNavigationTarget(out TaskNavigationTarget target)
+        {
+            target = TaskNavigationTarget.FromDefinition(targetItem);
+            return targetItem != null;
         }
 
         private void Unsubscribe()

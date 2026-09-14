@@ -36,6 +36,8 @@ public sealed class WorldMapNavigationController :MonoBehaviour, IPointerClickHa
     public event Action<Vector3> DestinationChanged;
     public event Action DestinationCleared;
 
+    public Transform NavigationOrigin => player;
+
     private RectTransform mapRect;
     private TerrainCollider terrainCollider;
     private NavMeshPath navigationPath;
@@ -96,28 +98,59 @@ public sealed class WorldMapNavigationController :MonoBehaviour, IPointerClickHa
             return false;
         }
 
-        if (!TryGetMapViewportPosition(eventData, out Vector2 viewportPosition))
+        if (!TryGetMapViewportPosition(
+                eventData,
+                out Vector2 viewportPosition))
         {
             return false;
         }
 
-        Ray ray = worldMapCamera.ViewportPointToRay(new Vector3(viewportPosition.x, viewportPosition.y, 0f));
+        Ray ray = worldMapCamera.ViewportPointToRay(
+            new Vector3(
+                viewportPosition.x,
+                viewportPosition.y,
+                0f));
 
-        if (!terrainCollider.Raycast(ray, out RaycastHit terrainHit, terrainRayDistance))
+        if (!terrainCollider.Raycast(
+                ray,
+                out RaycastHit terrainHit,
+                terrainRayDistance))
         {
             return false;
         }
 
-        if (!NavMesh.SamplePosition(player.position, out NavMeshHit startHit, startSampleDistance, navigationAreaMask))
+        return TrySetDestination(terrainHit.point);
+    }
+
+    public bool TrySetDestination(Vector3 worldPosition)
+    {
+        if (!ValidateReferences())
         {
-            Debug.LogWarning("Player is not close enough to an allowed NavMesh area.", player);
+            return false;
+        }
+
+        if (!NavMesh.SamplePosition(
+                player.position,
+                out NavMeshHit startHit,
+                startSampleDistance,
+                navigationAreaMask))
+        {
+            Debug.LogWarning(
+                "Player is not close enough to an allowed NavMesh area.",
+                player);
 
             return false;
         }
 
-        if (!NavMesh.SamplePosition(terrainHit.point, out NavMeshHit destinationHit, destinationSampleDistance, navigationAreaMask))
+        if (!NavMesh.SamplePosition(
+                worldPosition,
+                out NavMeshHit destinationHit,
+                destinationSampleDistance,
+                navigationAreaMask))
         {
-            Debug.LogWarning("The selected map position is not reachable.", this);
+            Debug.LogWarning(
+                "Task navigation target is not reachable.",
+                this);
 
             return false;
         }
@@ -130,24 +163,29 @@ public sealed class WorldMapNavigationController :MonoBehaviour, IPointerClickHa
             navigationAreaMask,
             navigationPath);
 
-        if (!pathFound || navigationPath.status != NavMeshPathStatus.PathComplete)
+        if (!pathFound ||
+            navigationPath.status != NavMeshPathStatus.PathComplete)
         {
-            Debug.LogWarning($"No complete path to the selected position. " + $"Status: {navigationPath.status}", this);
+            Debug.LogWarning(
+                $"No complete path to task target. " +
+                $"Status: {navigationPath.status}",
+                this);
 
             return false;
         }
 
-        worldPathCorners = navigationPath.corners;
+        Vector3[] corners = navigationPath.corners;
 
-        worldRouteRenderer?.ShowRoute(worldPathCorners);
-
-        if (worldPathCorners == null || worldPathCorners.Length < 2)
+        if (corners == null || corners.Length < 2)
         {
             return false;
         }
 
+        worldPathCorners = corners;
         Destination = destinationHit.position;
         HasDestination = true;
+
+        worldRouteRenderer?.ShowRoute(worldPathCorners);
 
         if (destinationMarker != null)
         {
@@ -170,14 +208,14 @@ public sealed class WorldMapNavigationController :MonoBehaviour, IPointerClickHa
         HasDestination = false;
         worldPathCorners = null;
 
-        // Çå³ý´óµØÍ¼ UI µ¼º½Ïß¡£
+        // æ¸…é™¤å¤§åœ°å›¾ UI å¯¼èˆªçº¿ã€‚
         routeGraphic?.ClearRoute();
 
-        // Çå³ýÊÀ½ç¿Õ¼äµ¼º½Ïß¡£
-        // Ð¡µØÍ¼Èç¹ûÍ¨¹ý MiniMapCamera äÖÈ¾Ëü£¬Ò²»áÍ¬Ê±ÏûÊ§¡£
+        // æ¸…é™¤ä¸–ç•Œç©ºé—´å¯¼èˆªçº¿ã€‚
+        // å°åœ°å›¾å¦‚æžœé€šè¿‡ MiniMapCamera æ¸²æŸ“å®ƒï¼Œä¹Ÿä¼šåŒæ—¶æ¶ˆå¤±ã€‚
         worldRouteRenderer?.ClearRoute();
 
-        // Òþ²Ø´óµØÍ¼Ä¿µÄµØ±ê¼Ç¡£
+        // éšè—å¤§åœ°å›¾ç›®çš„åœ°æ ‡è®°ã€‚
         if (destinationMarker != null)
         {
             destinationMarker.gameObject.SetActive(false);

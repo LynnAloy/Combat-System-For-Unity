@@ -9,7 +9,7 @@ using UnityEngine;
 namespace FlexibleTaskSystem
 {
     [Serializable]
-    public sealed class TalkToNpcTask : GameTask
+    public sealed class TalkToNpcTask : GameTask, ITaskNavigationSource
     {
         [Header("NPC")]
         [SerializeField]
@@ -121,6 +121,12 @@ namespace FlexibleTaskSystem
             interactionSubscription = null;
             completionSubscription = null;
             activeRequestId = null;
+        }
+
+        public bool TryGetNavigationTarget(out TaskNavigationTarget target)
+        {
+            target = TaskNavigationTarget.FromDefinition(targetNpc);
+            return targetNpc != null;
         }
     }
 }

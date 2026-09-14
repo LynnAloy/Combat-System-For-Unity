@@ -95,24 +95,7 @@ public sealed class PlayerRushSkill : MonoBehaviour
 
     private void TryStartSkill()
     {
-        if (!playerController.CanUseWeapon || fighter.InAction)
-        {
-            return;
-        }
-
-        if (playerController.IsRolling || playerController.IsChangingWeapon)
-        {
-            return;
-        }
-
-        if (!characterController.enabled || !characterController.isGrounded)
-        {
-            return;
-        }
-
-        EnemyController target = ResolveTarget();
-
-        if (!CanCastAt(target))
+        if (!TryGetAvailableTarget(out EnemyController target))
         {
             return;
         }
@@ -220,7 +203,7 @@ public sealed class PlayerRushSkill : MonoBehaviour
         previousInvulnerability = fighter.IsInvulnerable;
         previousSuppressAnimatorMove = combatController.SuppressAnimatorMove;
 
-        // ¼¼ÄÜÔË¶¯ÍêÈ«½»¸ø CharacterController¡£
+        // æŠ€èƒ½è¿åŠ¨å®Œå…¨äº¤ç»™ CharacterControllerã€‚
         combatController.SuppressAnimatorMove = true;
         animator.applyRootMotion = false;
 
@@ -232,8 +215,8 @@ public sealed class PlayerRushSkill : MonoBehaviour
         combatController.TargetEnemy = target;
         combatController.InCombat = true;
 
-        // ²»ÔÙµÈ´ıÊÕ½£¶¯»­¡£
-        // °´ÏÂ V µÄÍ¬Ò»Ö¡Òş²Ø½££¬²¢Çå¿Õ Weapon Layer¡£
+        // ä¸å†ç­‰å¾…æ”¶å‰‘åŠ¨ç”»ã€‚
+        // æŒ‰ä¸‹ V çš„åŒä¸€å¸§éšè—å‰‘ï¼Œå¹¶æ¸…ç©º Weapon Layerã€‚
         fighter.SetSwordVisible(false);
         animator.Play(
             weaponEmptyStateHash,
@@ -272,7 +255,7 @@ public sealed class PlayerRushSkill : MonoBehaviour
                 break;
             }
 
-            // ³å´Ì½×¶Î¿ÉÒÔ³ÖĞø¸ú×ÙÄ¿±ê¡£
+            // å†²åˆºé˜¶æ®µå¯ä»¥æŒç»­è·Ÿè¸ªç›®æ ‡ã€‚
             FaceTargetPosition(target.transform.position);
 
             float step = Mathf.Min(
@@ -295,7 +278,7 @@ public sealed class PlayerRushSkill : MonoBehaviour
             yield break;
         }
 
-        // Á¬»÷¿ªÊ¼Ç°Ö»È·¶¨Ò»´Î×îÖÕ³¯Ïò¡£
+        // è¿å‡»å¼€å§‹å‰åªç¡®å®šä¸€æ¬¡æœ€ç»ˆæœå‘ã€‚
         FaceTargetImmediately(target.transform.position);
 
         animator.CrossFadeInFixedTime(
@@ -313,8 +296,8 @@ public sealed class PlayerRushSkill : MonoBehaviour
                 this);
         }
 
-        // ¼¼ÄÜÆÚ¼äÈÔÈ»ÆÁ±Î Root Motion£¬
-        // µÈ´ıÍêÈ«»ìºÏµ½ Empty ºóÔÙ¹é»¹¿ØÖÆ¡£
+        // æŠ€èƒ½æœŸé—´ä»ç„¶å±è”½ Root Motionï¼Œ
+        // ç­‰å¾…å®Œå…¨æ··åˆåˆ° Empty åå†å½’è¿˜æ§åˆ¶ã€‚
         animator.CrossFadeInFixedTime(
             overrideEmptyStateHash,
             exitBlendDuration,
@@ -337,7 +320,7 @@ public sealed class PlayerRushSkill : MonoBehaviour
     {
         Vector3 targetPosition = target.transform.position;
 
-        // ±£Ö¤¹¥»÷µãÎ»ÓÚÍæ¼Ò½Ó½üµĞÈËµÄÕâÒ»²à¡£
+        // ä¿è¯æ”»å‡»ç‚¹ä½äºç©å®¶æ¥è¿‘æ•Œäººçš„è¿™ä¸€ä¾§ã€‚
         Vector3 awayFromTarget = transform.position - targetPosition;
         awayFromTarget.y = 0f;
 
@@ -360,7 +343,7 @@ public sealed class PlayerRushSkill : MonoBehaviour
 
         while (elapsed < attackTimeout)
         {
-            // Ö»Î¬³ÖÖØÁ¦£¬²»¸Ä±äË®Æ½Î»ÖÃºÍ³¯Ïò¡£
+            // åªç»´æŒé‡åŠ›ï¼Œä¸æ”¹å˜æ°´å¹³ä½ç½®å’Œæœå‘ã€‚
             MoveWithGravity(Vector3.zero);
 
             AnimatorStateInfo stateInfo =
@@ -466,8 +449,8 @@ public sealed class PlayerRushSkill : MonoBehaviour
                 AnimatorStateInfo stateInfo =
                     animator.GetCurrentAnimatorStateInfo(overrideLayerIndex);
 
-                // Òì³£ÖĞÖ¹Ê±Á¢¼´»Øµ½ Empty£¬·ÀÖ¹»Ö¸´ Root Motion
-                // ºó¼ÌĞø¶ÁÈ¡Á¬»÷¶¯»­µÄÎ»ÒÆ¡£
+                // å¼‚å¸¸ä¸­æ­¢æ—¶ç«‹å³å›åˆ° Emptyï¼Œé˜²æ­¢æ¢å¤ Root Motion
+                // åç»§ç»­è¯»å–è¿å‡»åŠ¨ç”»çš„ä½ç§»ã€‚
                 if (stateInfo.fullPathHash != overrideEmptyStateHash)
                 {
                     animator.Play(
@@ -494,7 +477,7 @@ public sealed class PlayerRushSkill : MonoBehaviour
                 previousSuppressAnimatorMove;
         }
 
-        // »Øµ½ÆÕÍ¨³Ö½£×´Ì¬£¬µ«²»¶îÍâ²¥·Å°Î½£¶¯»­¡£
+        // å›åˆ°æ™®é€šæŒå‰‘çŠ¶æ€ï¼Œä½†ä¸é¢å¤–æ’­æ”¾æ‹”å‰‘åŠ¨ç”»ã€‚
         fighter.SetSwordVisible(true);
         fighter.SetIsInvulnerable(previousInvulnerability);
         fighter.EndExternalAction();
@@ -505,6 +488,46 @@ public sealed class PlayerRushSkill : MonoBehaviour
         activeTarget = null;
         appliedHitCount = 0;
         processedHitIndexes.Clear();
+    }
+
+    public bool TryGetAvailableTarget(out EnemyController target)
+    {
+        target = null;
+
+        if (!isActiveAndEnabled || PauseManager.IsPaused || isRunning)
+        {
+            return false;
+        }
+
+        if (Time.deltaTime <= NumericGuard.MinDenominator)
+        {
+            return false;
+        }
+
+        if (!playerController.CanUseWeapon || fighter.InAction)
+        {
+            return false;
+        }
+
+        if (playerController.IsRolling || playerController.IsChangingWeapon)
+        {
+            return false;
+        }
+
+        if (!characterController.enabled || !characterController.isGrounded)
+        {
+            return false;
+        }
+
+        EnemyController resolvedTarget = ResolveTarget();
+
+        if (!CanCastAt(resolvedTarget))
+        {
+            return false;
+        }
+
+        target = resolvedTarget;
+        return true;
     }
 
     private void ValidateAnimator()

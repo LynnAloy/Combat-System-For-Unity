@@ -7,7 +7,7 @@ using UnityEngine;
 namespace FlexibleTaskSystem
 {
     [Serializable]
-    public sealed class ReachLocationTask : GameTask
+    public sealed class ReachLocationTask : GameTask, ITaskNavigationSource
     {
         [SerializeField] private LocationEnteredSignalSO locationEnteredSignal;
         [SerializeField] private LocationDefinitionSO targetLocation;
@@ -51,6 +51,12 @@ namespace FlexibleTaskSystem
             }
 
             Complete();
+        }
+
+        public bool TryGetNavigationTarget(out TaskNavigationTarget target)
+        {
+            target = TaskNavigationTarget.FromDefinition(targetLocation);
+            return targetLocation != null;
         }
 
         private void ReleaseSubscription()

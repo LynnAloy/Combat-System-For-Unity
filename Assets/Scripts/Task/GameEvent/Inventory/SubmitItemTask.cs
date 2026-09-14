@@ -8,7 +8,7 @@ using UnityEngine;
 namespace FlexibleTaskSystem
 {
     [Serializable]
-    public sealed class SubmitItemTask : GameTask
+    public sealed class SubmitItemTask : GameTask, ITaskNavigationSource
     {
         [Header("Submission")]
         [SerializeField] private NpcDefinitionSO targetNpc;
@@ -101,6 +101,12 @@ namespace FlexibleTaskSystem
 
             SetProgress(payload.Quantity, requiredQuantity);
             Complete();
+        }
+
+        public bool TryGetNavigationTarget(out TaskNavigationTarget target)
+        {
+            target = TaskNavigationTarget.FromDefinition(targetNpc);
+            return targetNpc != null;
         }
 
         private void ReleaseSubscription()
