@@ -23,19 +23,13 @@ public sealed class PlayerRushSkill : MonoBehaviour
     [SerializeField, Min(0.1f)] private float rushTimeout = 2f;
     [SerializeField, Min(0.1f)] private float distanceFromTarget = 1.1f;
     [SerializeField, Min(1f)] private float rotationSpeed = 900f;
+    [SerializeField, Min(0.001f)] private float arrivalTolerance = 0.03f;
 
     [Header("Attack")]
     [SerializeField, Min(0.1f)] private float attackTimeout = 8f;
     [SerializeField, Range(0f, 0.5f)] private float attackBlendDuration = 0.08f;
     [SerializeField] private bool invulnerableDuringSkill = true;
-
-    [Header("Retreat")]
-    [SerializeField, Min(0f)] private float retreatDistance = 2.5f;
-    [SerializeField, Min(0.1f)] private float retreatSpeed = 6f;
-
-    [Header("Weapon")]
-    [SerializeField, Min(0.1f)] private float weaponAnimationTimeout = 3f;
-    [SerializeField, Range(0f, 1f)] private float drawSwordVisibleTime = 0.45f;
+    [SerializeField, Range(0f, 0.5f)] private float exitBlendDuration = 0.08f;
 
 
     private readonly HashSet<int> processedHitIndexes = new();
@@ -56,9 +50,8 @@ public sealed class PlayerRushSkill : MonoBehaviour
     private int rushRunStateHash;
     private int comboStateHash;
     private int overrideEmptyStateHash;
-    private int sheatheSwordStateHash;
-    private int drawSwordStateHash;
     private int weaponEmptyStateHash;
+    private bool previousSuppressAnimatorMove;
 
     private Coroutine skillRoutine;
     private bool isRunning;
@@ -80,13 +73,8 @@ public sealed class PlayerRushSkill : MonoBehaviour
         weaponLayerIndex = animator.GetLayerIndex(WeaponLayerName);
 
         rushRunStateHash = Animator.StringToHash("Override Layer.Rush Run");
-        comboStateHash = Animator.StringToHash(
-            "Override Layer.Punch To Elbow Combo");
+        comboStateHash = Animator.StringToHash("Override Layer.Punch To Elbow Combo");
         overrideEmptyStateHash = Animator.StringToHash("Override Layer.Empty");
-        sheatheSwordStateHash = Animator.StringToHash(
-            "Weapon Layer.Sheathe Sword");
-        drawSwordStateHash = Animator.StringToHash(
-            "Weapon Layer.Draw Sword");
         weaponEmptyStateHash = Animator.StringToHash("Weapon Layer.Empty");
 
         ValidateAnimator();
@@ -226,10 +214,14 @@ public sealed class PlayerRushSkill : MonoBehaviour
         activeTarget = target;
         appliedHitCount = 0;
         processedHitIndexes.Clear();
-        previousApplyRootMotion = animator.applyRootMotion;
-        previousInvulnerability = fighter.IsInvulnerable;
         verticalVelocity = -2f;
 
+        previousApplyRootMotion = animator.applyRootMotion;
+        previousInvulnerability = fighter.IsInvulnerable;
+        previousSuppressAnimatorMove = combatController.SuppressAnimatorMove;
+
+        // 技能运动完全交给 CharacterController。
+        combatController.SuppressAnimatorMove = true;
         animator.applyRootMotion = false;
 
         if (invulnerableDuringSkill)
@@ -240,16 +232,19 @@ public sealed class PlayerRushSkill : MonoBehaviour
         combatController.TargetEnemy = target;
         combatController.InCombat = true;
 
-        yield return PlaySheatheAnimation();
+        // 不再等待收剑动画。
+        // 按下 V 的同一帧隐藏剑，并清空 Weapon Layer。
+        fighter.SetSwordVisible(false);
+        animator.Play(
+            weaponEmptyStateHash,
+            weaponLayerIndex,
+            0f);
 
         if (!IsTargetUsable(target))
         {
             FinishSkill();
             yield break;
         }
-
-        fighter.SetSwordVisible(false);
-        animator.Play(weaponEmptyStateHash, weaponLayerIndex, 0f);
 
         bool reachedTarget = false;
         float rushElapsed = 0f;
@@ -267,38 +262,41 @@ public sealed class PlayerRushSkill : MonoBehaviour
                 break;
             }
 
-            Vector3 toTarget = target.transform.position - transform.position;
-            toTarget.y = 0f;
+            Vector3 attackPosition = CalculateAttackPosition(target);
+            Vector3 toAttackPosition = attackPosition - transform.position;
+            toAttackPosition.y = 0f;
 
-            float distance = toTarget.magnitude;
-
-            if (distance <= distanceFromTarget)
+            if (toAttackPosition.magnitude <= arrivalTolerance)
             {
                 reachedTarget = true;
                 break;
             }
 
-            Vector3 direction = toTarget.normalized;
-            FaceDirection(direction);
+            // 冲刺阶段可以持续跟踪目标。
+            FaceTargetPosition(target.transform.position);
 
-            float availableDistance = distance - distanceFromTarget;
-            float step = Mathf.Min(rushSpeed * Time.deltaTime, availableDistance);
+            float step = Mathf.Min(
+                rushSpeed * Time.deltaTime,
+                toAttackPosition.magnitude);
 
-            MoveWithGravity(direction * step);
+            MoveWithGravity(toAttackPosition.normalized * step);
 
             rushElapsed += Time.deltaTime;
             yield return null;
         }
 
-        if (!reachedTarget)
+        if (!reachedTarget || !IsTargetUsable(target))
         {
-            Debug.LogWarning("Rush skill could not reach its target.", this);
+            Debug.LogWarning(
+                "Rush skill could not reach its attack position.",
+                this);
+
             FinishSkill();
             yield break;
         }
 
-        Vector3 lastTargetPosition = target.transform.position;
-        FaceTargetPosition(lastTargetPosition);
+        // 连击开始前只确定一次最终朝向。
+        FaceTargetImmediately(target.transform.position);
 
         animator.CrossFadeInFixedTime(
             comboStateHash,
@@ -306,163 +304,105 @@ public sealed class PlayerRushSkill : MonoBehaviour
             overrideLayerIndex,
             0f);
 
-        float attackElapsed = 0f;
+        yield return WaitForComboAnimation();
 
-        while (attackElapsed < attackTimeout)
+        if (appliedHitCount == 0)
+        {
+            Debug.LogWarning(
+                "Rush skill animation ended without applying damage.",
+                this);
+        }
+
+        // 技能期间仍然屏蔽 Root Motion，
+        // 等待完全混合到 Empty 后再归还控制。
+        animator.CrossFadeInFixedTime(
+            overrideEmptyStateHash,
+            exitBlendDuration,
+            overrideLayerIndex,
+            0f);
+
+        float exitElapsed = 0f;
+
+        while (exitElapsed < exitBlendDuration)
         {
             MoveWithGravity(Vector3.zero);
+            exitElapsed += Time.deltaTime;
+            yield return null;
+        }
 
-            if (target != null)
-            {
-                lastTargetPosition = target.transform.position;
-                FaceTargetPosition(lastTargetPosition);
-            }
+        FinishSkill();
+    }
+
+    private Vector3 CalculateAttackPosition(EnemyController target)
+    {
+        Vector3 targetPosition = target.transform.position;
+
+        // 保证攻击点位于玩家接近敌人的这一侧。
+        Vector3 awayFromTarget = transform.position - targetPosition;
+        awayFromTarget.y = 0f;
+
+        if (awayFromTarget.sqrMagnitude <= NumericGuard.MinDenominator)
+        {
+            awayFromTarget = -transform.forward;
+        }
+        else
+        {
+            awayFromTarget.Normalize();
+        }
+
+        return targetPosition + awayFromTarget * distanceFromTarget;
+    }
+
+    private IEnumerator WaitForComboAnimation()
+    {
+        float elapsed = 0f;
+        bool enteredComboState = false;
+
+        while (elapsed < attackTimeout)
+        {
+            // 只维持重力，不改变水平位置和朝向。
+            MoveWithGravity(Vector3.zero);
 
             AnimatorStateInfo stateInfo =
                 animator.GetCurrentAnimatorStateInfo(overrideLayerIndex);
 
             if (stateInfo.fullPathHash == comboStateHash)
             {
-                float normalizedTime = stateInfo.normalizedTime;
-
-                if (normalizedTime >= 0.98f)
-                {
-                    break;
-                }
-            }
-
-            attackElapsed += Time.deltaTime;
-            yield return null;
-        }
-
-        if (appliedHitCount == 0)
-        {
-            Debug.LogWarning("Rush skill animation ended without applying damage.", this);
-        }
-
-        animator.CrossFadeInFixedTime(
-            overrideEmptyStateHash,
-            0.08f,
-            overrideLayerIndex,
-            0f);
-
-        animator.SetFloat("ForwardSpeed", -0.6f);
-        animator.SetFloat("StrafeSpeed", 0f);
-
-        Vector3 retreatDirection = transform.position - lastTargetPosition;
-        retreatDirection.y = 0f;
-
-        if (retreatDirection.sqrMagnitude <= NumericGuard.MinDenominator)
-        {
-            retreatDirection = -transform.forward;
-        }
-        else
-        {
-            retreatDirection.Normalize();
-        }
-
-        float remainingRetreatDistance = retreatDistance;
-        float retreatElapsed = 0f;
-        float retreatTimeout = retreatDistance / retreatSpeed + 0.75f;
-
-        while (remainingRetreatDistance > 0.01f &&
-               retreatElapsed < retreatTimeout)
-        {
-            FaceTargetPosition(lastTargetPosition);
-
-            float step = Mathf.Min(
-                retreatSpeed * Time.deltaTime,
-                remainingRetreatDistance);
-
-            Vector3 positionBeforeMove = transform.position;
-            MoveWithGravity(retreatDirection * step);
-
-            Vector3 moved = transform.position - positionBeforeMove;
-            moved.y = 0f;
-            remainingRetreatDistance -= moved.magnitude;
-
-            retreatElapsed += Time.deltaTime;
-            yield return null;
-        }
-
-        animator.SetFloat("ForwardSpeed", 0f);
-        animator.SetFloat("StrafeSpeed", 0f);
-
-        yield return PlayDrawAnimation();
-
-        FinishSkill();
-    }
-
-    private IEnumerator PlaySheatheAnimation()
-    {
-        animator.Play(sheatheSwordStateHash, weaponLayerIndex, 1f);
-        yield return null;
-
-        float elapsed = 0f;
-        bool enteredState = false;
-
-        while (elapsed < weaponAnimationTimeout)
-        {
-            MoveWithGravity(Vector3.zero);
-
-            AnimatorStateInfo stateInfo =
-                animator.GetCurrentAnimatorStateInfo(weaponLayerIndex);
-
-            if (stateInfo.fullPathHash == sheatheSwordStateHash)
-            {
-                enteredState = true;
-
-                if (stateInfo.normalizedTime <= 0.02f)
-                {
-                    break;
-                }
-            }
-            else if (enteredState)
-            {
-                break;
-            }
-
-            elapsed += Time.deltaTime;
-            yield return null;
-        }
-    }
-
-    private IEnumerator PlayDrawAnimation()
-    {
-        animator.Play(drawSwordStateHash, weaponLayerIndex, 0f);
-        yield return null;
-
-        bool swordShown = false;
-        float elapsed = 0f;
-
-        while (elapsed < weaponAnimationTimeout)
-        {
-            MoveWithGravity(Vector3.zero);
-
-            AnimatorStateInfo stateInfo =
-                animator.GetCurrentAnimatorStateInfo(weaponLayerIndex);
-
-            if (stateInfo.fullPathHash == drawSwordStateHash)
-            {
-                if (!swordShown &&
-                    stateInfo.normalizedTime >= drawSwordVisibleTime)
-                {
-                    fighter.SetSwordVisible(true);
-                    swordShown = true;
-                }
+                enteredComboState = true;
 
                 if (stateInfo.normalizedTime >= 0.98f)
                 {
-                    break;
+                    yield break;
                 }
+            }
+            else if (enteredComboState &&
+                     !animator.IsInTransition(overrideLayerIndex))
+            {
+                yield break;
             }
 
             elapsed += Time.deltaTime;
             yield return null;
         }
 
-        fighter.SetSwordVisible(true);
-        animator.Play(weaponEmptyStateHash, weaponLayerIndex, 0f);
+        Debug.LogWarning(
+            "Rush skill combo animation timed out.",
+            this);
+    }
+
+    private void FaceTargetImmediately(Vector3 targetPosition)
+    {
+        Vector3 direction = targetPosition - transform.position;
+        direction.y = 0f;
+
+        if (direction.sqrMagnitude <= NumericGuard.MinDenominator)
+        {
+            return;
+        }
+
+        transform.rotation = Quaternion.LookRotation(
+            direction.normalized,
+            Vector3.up);
     }
 
     private void MoveWithGravity(Vector3 planarDisplacement)
@@ -523,11 +463,18 @@ public sealed class PlayerRushSkill : MonoBehaviour
 
             if (overrideLayerIndex >= 0)
             {
-                animator.CrossFadeInFixedTime(
-                    overrideEmptyStateHash,
-                    0.08f,
-                    overrideLayerIndex,
-                    0f);
+                AnimatorStateInfo stateInfo =
+                    animator.GetCurrentAnimatorStateInfo(overrideLayerIndex);
+
+                // 异常中止时立即回到 Empty，防止恢复 Root Motion
+                // 后继续读取连击动画的位移。
+                if (stateInfo.fullPathHash != overrideEmptyStateHash)
+                {
+                    animator.Play(
+                        overrideEmptyStateHash,
+                        overrideLayerIndex,
+                        0f);
+                }
             }
 
             if (weaponLayerIndex >= 0)
@@ -541,6 +488,13 @@ public sealed class PlayerRushSkill : MonoBehaviour
             animator.applyRootMotion = previousApplyRootMotion;
         }
 
+        if (combatController != null)
+        {
+            combatController.SuppressAnimatorMove =
+                previousSuppressAnimatorMove;
+        }
+
+        // 回到普通持剑状态，但不额外播放拔剑动画。
         fighter.SetSwordVisible(true);
         fighter.SetIsInvulnerable(previousInvulnerability);
         fighter.EndExternalAction();
@@ -555,20 +509,32 @@ public sealed class PlayerRushSkill : MonoBehaviour
 
     private void ValidateAnimator()
     {
-        bool valid = overrideLayerIndex >= 0 && weaponLayerIndex >= 0;
+        bool valid =
+            overrideLayerIndex >= 0 &&
+            weaponLayerIndex >= 0;
 
-        valid &= animator.HasState(overrideLayerIndex, rushRunStateHash);
-        valid &= animator.HasState(overrideLayerIndex, comboStateHash);
-        valid &= animator.HasState(overrideLayerIndex, overrideEmptyStateHash);
-        valid &= animator.HasState(weaponLayerIndex, sheatheSwordStateHash);
-        valid &= animator.HasState(weaponLayerIndex, drawSwordStateHash);
-        valid &= animator.HasState(weaponLayerIndex, weaponEmptyStateHash);
+        valid &= animator.HasState(
+            overrideLayerIndex,
+            rushRunStateHash);
+
+        valid &= animator.HasState(
+            overrideLayerIndex,
+            comboStateHash);
+
+        valid &= animator.HasState(
+            overrideLayerIndex,
+            overrideEmptyStateHash);
+
+        valid &= animator.HasState(
+            weaponLayerIndex,
+            weaponEmptyStateHash);
 
         if (!valid)
         {
             Debug.LogError(
                 "PlayerRushSkill Animator states are incomplete.",
                 this);
+
             enabled = false;
         }
     }

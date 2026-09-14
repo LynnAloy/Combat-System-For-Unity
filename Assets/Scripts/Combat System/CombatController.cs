@@ -6,6 +6,9 @@ public class CombatController : MonoBehaviour
     private Animator animator;
     private PlayerController playerController;
     EnemyController targetEnemy;
+
+    public bool SuppressAnimatorMove { get; set; }
+
     public EnemyController TargetEnemy
     {
         get => targetEnemy;
@@ -103,6 +106,12 @@ public class CombatController : MonoBehaviour
     public void ApplyAnimatorMove(Animator sourceAnimator)
     {
         if (sourceAnimator != animator)
+        {
+            return;
+        }
+
+        // PlayerRushSkill 使用 CharacterController 独占技能运动。
+        if (SuppressAnimatorMove)
         {
             return;
         }

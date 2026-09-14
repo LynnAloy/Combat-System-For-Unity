@@ -170,15 +170,20 @@ public sealed class WorldMapNavigationController :MonoBehaviour, IPointerClickHa
         HasDestination = false;
         worldPathCorners = null;
 
+        // 清除大地图 UI 导航线。
         routeGraphic?.ClearRoute();
 
+        // 清除世界空间导航线。
+        // 小地图如果通过 MiniMapCamera 渲染它，也会同时消失。
+        worldRouteRenderer?.ClearRoute();
+
+        // 隐藏大地图目的地标记。
         if (destinationMarker != null)
         {
             destinationMarker.gameObject.SetActive(false);
         }
 
         DestinationCleared?.Invoke();
-        worldRouteRenderer?.ClearRoute();
     }
 
     private void RefreshMapOverlay()

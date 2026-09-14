@@ -982,8 +982,6 @@ MonoBehaviour:
   rushTimeout: 2
   distanceFromTarget: 1.1
   rotationSpeed: 900
-  damage: 15
-  hitNormalizedTime: 0.58
   attackTimeout: 8
   attackBlendDuration: 0.08
   invulnerableDuringSkill: 1
@@ -2743,7 +2741,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: 58e8fe79378bedb45803bf3aea9347bd, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -0.06
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 58e8fe79378bedb45803bf3aea9347bd, type: 3}
       propertyPath: m_LocalPosition.y
@@ -2751,7 +2749,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 58e8fe79378bedb45803bf3aea9347bd, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -0.36
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 58e8fe79378bedb45803bf3aea9347bd, type: 3}
       propertyPath: m_LocalRotation.w
